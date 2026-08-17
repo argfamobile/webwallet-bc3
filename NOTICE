@@ -1,0 +1,8 @@
+Third-party components bundled in this repository
+=================================================
+
+electrumx-bc3/ contains a Coin class for ElectrumX, which is MIT licensed,
+Copyright (c) 2016-2017 Neil Booth. See https://github.com/spesmilo/electrumx
+
+wallet/assets/vendor/wallet-core.js bundles scure/noble libraries (MIT),
+Copyright (c) Paul Miller, and qrcode-generator (MIT), Copyright (c) Kazuhiko Arase.
