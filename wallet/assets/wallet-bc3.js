@@ -16,17 +16,7 @@
 import * as WC from './vendor/wallet-core.js';
 
 const SEND_ENABLED = true;                  // habilitado tras validar la firma (testmempoolaccept allowed) — Fase 4
-// Cajero por defecto: el del propio origen. Se puede apuntar a OTRO servidor (el de un
-// tercero, o el tuyo) por <meta name="bc3-cashier"> o desde Settings, y esa es justamente
-// la pieza que hace que la wallet siga sirviendo el día que este servidor no exista:
-// cualquiera puede levantar ElectrumX-BC3 + cajero y los usuarios apuntan su copia ahí.
-// Ver github.com/argfamobile/webwallet-bc3.
-const CASHIER_DEFAULT = '/api/bc3/wallet';
-const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-function cashierBase() {
-  const meta = document.querySelector('meta[name="bc3-cashier"]');
-  return (lsGet('bc3_cashier') || (meta && meta.content) || CASHIER_DEFAULT).replace(/\/+$/, '');
-}
+const API = '/api/bc3/wallet';
 const NET = WC.btc.NETWORK;                 // Bitcoin mainnet = params BC3
 const GAP = { receive: 12, change: 6 };     // ventana de scan por cadena
 const COIN = 0;                             // coin type (BC3 reusa params Bitcoin)
@@ -89,7 +79,7 @@ async function mapChunked(items, fn, size = 10) {
 
 // ── API del cajero ──────────────────────────────────────────────────────────
 async function api(path, opts) {
-  const r = await fetch(cashierBase() + path, opts);
+  const r = await fetch(API + path, opts);
   const j = await r.json().catch(() => ({ ok: false, error: 'bad json' }));
   if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
@@ -346,6 +336,111 @@ async function doSend() {
   } finally { $('sendBtn').disabled = false; }
 }
 
+// ── Export a BitcoinIII Core (recuperación sin depender de este servidor) ───
+// El objetivo es que el usuario pueda recuperar sus fondos con SOLO el nodo oficial,
+// sin esta web, sin nuestro cajero y sin ninguna herramienta de terceros. Core no
+// entiende seeds BIP39: entiende descriptores, así que se los damos ya armados.
+//
+// El checksum es el algoritmo de src/script/descriptor.cpp (DescriptorChecksum).
+// Calcularlo acá le ahorra al usuario ejecutar `getdescriptorinfo` ocho veces y, sobre
+// todo, le ahorra la trampa de copiar el `descriptor` que devuelve ese comando: viene
+// normalizado a xpub, y al importarlo la wallet ve los fondos pero no puede gastarlos.
+// Verificado: los 8 checksums coinciden con los que responde el nodo.
+const DESC_IN_CHARSET = "0123456789()[],'/*abcdefgh@:$%{}IJKLMNOPQRSTUVWXYZ&+-.;<=>?!^_|~ijklmnopqrstuvwxyzABCDEFGH`#\"\\ ";
+const DESC_CK_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+function descPolyMod(c, val) {
+  const c0 = c >> 35n;
+  c = ((c & 0x7ffffffffn) << 5n) ^ BigInt(val);
+  if (c0 & 1n)  c ^= 0xf5dee51989n;
+  if (c0 & 2n)  c ^= 0xa9fdca3312n;
+  if (c0 & 4n)  c ^= 0x1bab10e32dn;
+  if (c0 & 8n)  c ^= 0x3706b1677an;
+  if (c0 & 16n) c ^= 0x644d626ffdn;
+  return c;
+}
+function descriptorChecksum(desc) {
+  let c = 1n, cls = 0, n = 0;
+  for (const ch of desc) {
+    const pos = DESC_IN_CHARSET.indexOf(ch);
+    if (pos === -1) return null;
+    c = descPolyMod(c, pos & 31);
+    cls = cls * 3 + (pos >> 5);
+    if (++n === 3) { c = descPolyMod(c, cls); cls = 0; n = 0; }
+  }
+  if (n > 0) c = descPolyMod(c, cls);
+  for (let i = 0; i < 8; i++) c = descPolyMod(c, 0);
+  c ^= 1n;
+  let out = '';
+  for (let i = 0; i < 8; i++) out += DESC_CK_CHARSET[Number((c >> (5n * BigInt(7 - i))) & 31n)];
+  return out;
+}
+// Los 8 descriptores (4 tipos × recibir/cambio) desde el xprv MAESTRO con el path
+// completo. Un solo campo en vez de cuatro claves de cuenta, y sin key-origin: Core lo
+// acepta igual y deriva exactamente las mismas direcciones (verificado contra el nodo).
+function coreImportCommands() {
+  const xprv = W.root.privateExtendedKey;
+  const reqs = [];
+  for (const [fn, purpose] of [['pkh', 44], ['sh(wpkh', 49], ['wpkh', 84], ['tr', 86]]) {
+    for (const chain of [0, 1]) {
+      const body = `${xprv}/${purpose}h/0h/0h/${chain}/*`;
+      const d = fn === 'sh(wpkh' ? `sh(wpkh(${body}))` : `${fn}(${body})`;
+      reqs.push({
+        desc: `${d}#${descriptorChecksum(d)}`,
+        timestamp: 0,          // rescan completo: el usuario no sabe cuándo recibió
+        // active:false A PROPÓSITO. `active` NO significa "habilitado": significa "de este
+        // descriptor salen las direcciones NUEVAS de este tipo", y en wallet.cpp los activos
+        // viven en un mapa `spk_mans[type] = spk_man` — un único slot por (tipo, rama). Un
+        // import con active:true DESPLAZA al que estuviera ahí, así que pegar esto por error
+        // en una wallet con fondos le cambia la rama de la que deriva. Con active:false la
+        // wallet ajena queda INTACTA, y aun así los fondos importados se ven y se gastan
+        // igual (medido: detectados en 10 s y barridos con sendall sin problema), porque la
+        // vigilancia y la firma no miran ese flag. Lo único que no se puede es pedirle a esta
+        // wallet direcciones nuevas de esta seed, que en una recuperación no hace falta.
+        active: false,
+        internal: chain === 1,
+        range: [0, 100],
+      });
+    }
+  }
+  // El xprv NO se devuelve por separado: ya viaja dentro de los descriptores del import,
+  // así que enseñarlo aparte no aporta ningún paso y sí expone la clave sin motivo.
+  return {
+    // POSICIONAL, no con nombre. La consola del Qt parsea con RPCConvertValues
+    // (rpcconsole.cpp), que trata cada argumento como JSON: un `blank=true` ahí da
+    // "Error parsing JSON: blank=true". Los named args solo valen con `bitcoin-cli -named`,
+    // que es OTRO camino — asumir que son equivalentes es justo lo que rompió la v3.11.245.
+    // Firma: createwallet "wallet_name" disable_private_keys blank ...
+    // El nombre es largo a propósito: tiene que ser inconfundible en el desplegable del Qt.
+    create: 'createwallet "bc3-web-wallet-recovery" false true',
+    // El Qt NO cambia el selector de wallet al crear una. Sin este paso intermedio, el
+    // import se ejecuta sobre la que estuviera abierta y devuelve 8 success igualmente.
+    check: 'getwalletinfo',
+    // Comillas simples: el parser de esa consola las trata como literal (STATE_SINGLEQUOTED),
+    // así que el JSON viaja intacto. El formato con barras invertidas es el del terminal.
+    importCmd: `importdescriptors '${JSON.stringify(reqs)}'`,
+  };
+}
+
+function showCoreExport() {
+  if (!W) return;
+  if (!confirm('This shows your MASTER PRIVATE KEY. Anyone who gets it can spend your coins — treat it exactly like your seed phrase. Make sure nobody can see your screen. Continue?')) return;
+  const c = coreImportCommands();
+  $('coreCmd1').textContent = c.create;
+  $('coreCmdCheck').textContent = c.check;
+  $('coreCmd2').textContent = c.importCmd;
+  $('coreExport').hidden = false;
+  $('coreExport').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function copyText(str, label) {
+  try {
+    await navigator.clipboard.writeText(str);
+    toast(label + ' copied');
+  } catch {
+    toast('Could not copy — select the text and copy manually', 'err');
+  }
+}
+
 // ── settings / export / persistencia ────────────────────────────────────────
 function showSeed() {
   if (!confirm('Your seed phrase gives FULL control of your funds. Make sure no one can see your screen. Reveal it?')) return;
@@ -421,23 +516,13 @@ function wire() {
   $('newAddr').onclick = nextAddress;
   $('refreshBal').onclick = refreshBalance;
   $('showSeedBtn').onclick = showSeed;
-  // Selector de cajero: lo que permite seguir usando la wallet contra otro servidor.
-  const cu = $('cashierUrl');
-  if (cu) {
-    cu.value = lsGet('bc3_cashier') || '';
-    cu.placeholder = CASHIER_DEFAULT;
-    $('saveCashier').onclick = () => {
-      const v = cu.value.trim().replace(/\/+$/, '');
-      try {
-        if (v) localStorage.setItem('bc3_cashier', v); else localStorage.removeItem('bc3_cashier');
-      } catch { return toast('This browser blocks local storage', 'err'); }
-      toast(v ? 'Using ' + v : 'Back to the default server');
-      refreshBalance();
-    };
-    $('resetCashier').onclick = () => {
-      try { localStorage.removeItem('bc3_cashier'); } catch { /* ignore */ }
-      cu.value = ''; toast('Back to the default server'); refreshBalance();
-    };
+  const ce = $('coreExportBtn');
+  if (ce) {
+    ce.onclick = showCoreExport;
+    $('copyCmd1').onclick = () => copyText($('coreCmd1').textContent, 'Step 1');
+    $('copyCmdCheck').onclick = () => copyText($('coreCmdCheck').textContent, 'Step 2');
+    $('copyCmd2').onclick = () => copyText($('coreCmd2').textContent, 'Step 2');
+    $('printCore').onclick = () => window.print();
   }
   $('saveDeviceBtn').onclick = saveToDevice;
   // Mostrar/ocultar passphrase (ojo) en ambos campos
@@ -464,8 +549,9 @@ function wire() {
   $('unlockBtn').onclick = unlock;
   $('unlockToImport').onclick = () => show('onboard');
   $('unlockPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
-  // El botón Lock vive en el topbar del sitio; en un hosting propio de la wallet
-  // (webwallet-bc3/wallet) ese chrome no existe, así que el módulo no puede asumirlo.
+  // El botón Lock vive en el topbar del SITIO. La misma wallet se publica suelta en
+  // github.com/argfamobile/webwallet-bc3, donde ese chrome no existe: sin la guarda, el
+  // módulo muere con TypeError antes de arrancar. Los demás ids del chrome ya la tienen.
   const lockBtn = $('lockBtn');
   if (lockBtn) lockBtn.onclick = () => { W = null; show(hasSaved() ? 'unlock' : 'onboard'); };
   // Send (build + sign + broadcast client-side)

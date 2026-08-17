@@ -33,6 +33,22 @@
     /* ── Theme BC3: ÚNICO override de acentos (igual que los dashboards). Verde --brand = chrome/CTA; naranja = moneda. ── */
     :root { --accent-glow: #B5630A; --accent-secondary: #F7931A; --accent-tertiary: #FFB454; --accent: var(--accent-secondary); }
     [hidden] { display: none !important; }
+    /* Export a BitcoinIII Core */
+    .core-export { margin-top: 14px; border: 1px solid color-mix(in srgb, var(--accent-secondary) 35%, transparent); border-radius: 12px; padding: 14px; background: rgba(0,0,0,.25); }
+    .core-warn { background: color-mix(in srgb, var(--accent-danger) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent-danger) 45%, transparent); color: var(--text-primary); border-radius: 9px; padding: 9px 11px; font-size: .82rem; margin-bottom: 12px; }
+    .core-step { font-size: .8rem; color: var(--text-secondary); margin: 14px 0 6px; }
+    .core-step:first-of-type { margin-top: 0; }
+    .core-box { background: rgba(0,0,0,.45); border: 1px solid var(--panel-border); border-radius: 9px; padding: 10px 11px; font-size: .74rem; line-height: 1.5; word-break: break-all; color: var(--text-primary); max-height: 130px; overflow-y: auto; }
+    .core-box--tall { max-height: 190px; }
+    .core-copy { margin-top: 8px; }
+    .core-stop { margin: 16px 0 4px; background: color-mix(in srgb, var(--accent-secondary) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent-secondary) 55%, transparent); border-radius: 9px; padding: 10px 12px; font-size: .82rem; line-height: 1.55; }
+    @media print {
+      body * { visibility: hidden; }
+      #coreExport, #coreExport * { visibility: visible; }
+      #coreExport { position: absolute; left: 0; top: 0; width: 100%; border: 0; background: #fff; color: #000; }
+      #coreExport .core-box { background: #fff; color: #000; border: 1px solid #999; max-height: none; overflow: visible; }
+      #coreExport .btn, #coreExport .core-copy { display: none !important; }
+    }
 
     /* Wordmark serif BitcoinIII — "III" naranja (idéntico a los dashboards) */
     .side__pool .coin-name { font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 1.36rem; letter-spacing: -0.2px; line-height: 1.05; }
@@ -212,7 +228,7 @@
 
 <p class="topnote">
   Non-custodial BitcoinIII wallet. Your seed and keys stay in this browser.<br>
-  <a href="https://github.com/argfamobile/webwallet-bc3" target="_blank" rel="noopener">Source, and how to recover without any server</a>
+  <a href="https://github.com/argfamobile/BC3-recovery" target="_blank" rel="noopener">Source, and how to recover without any server</a>
 </p>
 
 <div class="wallet-shell">
@@ -355,14 +371,32 @@
                 <button id="removeBtn" class="btn ghost" style="margin-top:10px" hidden>Remove wallet from this device</button>
                 <p class="note">Saving stores your seed encrypted with AES-GCM (PBKDF2, 210k iters) in this browser. The passphrase never leaves your device.</p>
 
-                <h2 style="margin-top:22px">Server</h2>
-                <label class="fld">Wallet server (cashier)</label>
-                <input type="text" id="cashierUrl" placeholder="/api/bc3/wallet" autocomplete="off" spellcheck="false">
-                <div class="row" style="margin-top:10px">
-                  <button id="saveCashier" class="btn ghost">Use this server</button>
-                  <button id="resetCashier" class="btn ghost">Reset to default</button>
+                <h2 style="margin-top:22px">Move to BitcoinIII Core</h2>
+                <p class="note" style="margin-top:0">Take control of this wallet from the official BitcoinIII Core desktop app, without needing this website. Keep what this gives you <b>wherever you keep your seed phrase</b> &mdash; it is worth exactly the same.</p>
+                <button id="coreExportBtn" class="btn ghost">Show me what to paste into Core</button>
+
+                <div id="coreExport" class="core-export" hidden>
+                  <div class="core-warn">Step 3 below contains your private key. Anyone who copies it can spend your coins &mdash; treat it exactly like your seed phrase.</div>
+
+                  <div class="core-step"><b>Step 1.</b> In Core, open <b>Window &rarr; Console</b> and paste this. It creates an empty wallet to recover into:</div>
+                  <div class="core-box mono" id="coreCmd1"></div>
+                  <button id="copyCmd1" class="btn ghost core-copy">Copy step 1</button>
+
+                  <div class="core-stop">
+                    <b>Now switch wallets before going on.</b> Core does <i>not</i> do this for you: at the top of the console window there is a <b>Wallet</b> dropdown, still pointing at whatever was open. Change it to <b>bc3-web-wallet-recovery</b>.
+                  </div>
+
+                  <div class="core-step"><b>Step 2.</b> Confirm you switched. The answer must say <span class="mono">"walletname": "bc3-web-wallet-recovery"</span>:</div>
+                  <div class="core-box mono" id="coreCmdCheck"></div>
+                  <button id="copyCmdCheck" class="btn ghost core-copy">Copy step 2</button>
+
+                  <div class="core-step"><b>Step 3.</b> Only once step 2 shows the right name, paste this. It is long &mdash; use the button, don't retype it:</div>
+                  <div class="core-box mono core-box--tall" id="coreCmd2"></div>
+                  <button id="copyCmd2" class="btn ghost core-copy">Copy step 3</button>
+
+                  <p class="note">Core scans the chain and your balance appears. It takes seconds &mdash; BC3 is a small chain. To move the funds out afterwards, use <span class="mono">sendall</span>. Full instructions: <a href="https://github.com/argfamobile/webwallet-bc3" target="_blank" rel="noopener">github.com/argfamobile/webwallet-bc3</a></p>
+                  <button id="printCore" class="btn ghost">Print this page</button>
                 </div>
-                <p class="note">This wallet reads balances through a server, but your keys never leave this browser either way &mdash; it only ever sends public addresses and already-signed transactions. If ArgfaMining ever goes away, point this at any other BC3 server and the wallet keeps working. <a href="https://github.com/argfamobile/webwallet-bc3" target="_blank" rel="noopener">How to run one, and how to recover without any server at all</a>.</p>
               </div>
               </div>
             </div>
