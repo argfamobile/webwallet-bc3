@@ -67,10 +67,22 @@ Open Core and go to **Window → Console** (in `bitcoinIII-qt`). You'll type com
 ### 3a. Create an empty wallet
 
 ```
-createwallet wallet_name=recovery blank=true
+createwallet "bc3-web-wallet-recovery" false true
 ```
 
-### 3b. Build your eight descriptors
+Those arguments are positional on purpose. The Core console reads every argument as JSON, so `blank=true` fails there with `Error parsing JSON` — named arguments only work with `bitcoinIII-cli -named`, which is a different path.
+
+### 3b. Switch to that wallet, and check that you did
+
+**Core does not switch for you.** At the top of the console window there is a **Wallet** dropdown still pointing at whatever was open before. Change it to `bc3-web-wallet-recovery`, then confirm:
+
+```
+getwalletinfo
+```
+
+The answer must say `"walletname": "bc3-web-wallet-recovery"`. If it says anything else, you are about to import into the wrong wallet.
+
+### 3c. Build your eight descriptors
 
 A *descriptor* tells Core how your addresses were made. Your wallet could receive on four different address styles, so there are four of them — and each needs a receiving and a change version, which is eight lines.
 
@@ -89,7 +101,7 @@ tr(XPRV/86h/0h/0h/1/*)
 
 **Import all eight even if you only ever used one address.** They cover the four styles the wallet supported — legacy `1…`, `3…`, `bc1q…` and `bc1p…`. If you skip one, any coins you received on it stay invisible, and the balance you see will be wrong in the worst possible way: quietly.
 
-### 3c. Get a checksum for each one
+### 3d. Get a checksum for each one
 
 Core refuses descriptors without a checksum. For each of the eight lines, run:
 
@@ -105,31 +117,33 @@ pkh(XPRV/44h/0h/0h/0/*)#abcd1234
 
 > **Do not copy the `descriptor` field from that reply.** This is the single most common way to get stuck. Core answers with a *rewritten* version of your descriptor in which your private key has been replaced by a public one. Import that and you get a wallet that can watch your coins but can never spend them, and the error message won't explain why. Take the `checksum` and nothing else.
 
-### 3d. Import
+### 3e. Import
 
 Import them **one at a time** — eight short commands instead of one enormous one. If a line has a typo you'll see exactly which, instead of hunting through a wall of text.
+
+> **Why `"active": false`.** In Core, "active" doesn't mean "enabled" — it means *"new addresses of this type come from this descriptor"*, and there is room for exactly one per address type. Importing with `"active": true` therefore **evicts** whatever was there, so running these commands in the wrong wallet silently changes which branch that wallet derives from. With `false` nothing is displaced, and you lose nothing that matters here: the wallet still sees the imported funds and still spends them, because watching and signing don't consult that flag. The only thing it won't do is hand you *new* addresses from this seed, which is not what you came for.
 
 Note the quoting: **single quotes on the outside, double quotes inside, no backslashes.** That is what the Core console expects.
 
 The four *receiving* descriptors use `"internal":false`:
 
 ```
-importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":true,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/0/*))#CHECKSUM","timestamp":0,"active":true,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":true,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":true,"internal":false,"range":[0,100]}]'
+importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
+importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/0/*))#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
+importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
+importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
 ```
 
 The four *change* ones are identical except the path ends in `/1/*` and `internal` is `true`:
 
 ```
-importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":true,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/1/*))#CHECKSUM","timestamp":0,"active":true,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":true,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":true,"internal":true,"range":[0,100]}]'
+importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
+importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/1/*))#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
+importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
+importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
 ```
 
-Each `CHECKSUM` is the one you got in Step 3c **for that exact line** — they are all different, and a checksum from the wrong line will be rejected.
+Each `CHECKSUM` is the one you got in Step 3d **for that exact line** — they are all different, and a checksum from the wrong line will be rejected.
 
 `"timestamp":0` tells Core to search the whole chain, because you don't know when you received. On BC3 that scan takes seconds.
 
@@ -162,6 +176,8 @@ To move everything out — the real proof that you are in control:
 sendall ["YOUR_DESTINATION_ADDRESS"]
 ```
 
+Use `sendall` rather than `sendtoaddress`: it sweeps everything without needing a change address, which is what you want when the descriptors are imported as inactive.
+
 That's it. Your coins are yours again, and no part of it went through us.
 
 ---
@@ -179,10 +195,10 @@ If they *don't* match, you wrote your words down wrong — and you have just fou
 ## If something goes wrong
 
 **`Cannot import descriptor without private keys to a wallet with private keys enabled`**
-You imported the rewritten descriptor from Step 3c instead of your own. Go back and use only the `checksum`, appended to the line you typed.
+You imported the rewritten descriptor from Step 3d instead of your own. Go back and use only the `checksum`, appended to the line you typed.
 
 **`Missing checksum`**
-You skipped Step 3c on that descriptor.
+You skipped Step 3d on that descriptor.
 
 **Core rejects your key**
 It probably starts with `zprv` or `yprv`. Use the **BIP32 Root Key** field, which starts with `xprv`.
@@ -190,10 +206,36 @@ It probably starts with `zprv` or `yprv`. Use the **BIP32 Root Key** field, whic
 **Balance is zero but you expected coins**
 Either the rescan is still running (`getwalletinfo` shows `scanning`), or you imported fewer than eight descriptors, or the coins are on addresses beyond index 100 — raise `range` to `[0,1000]` and import again.
 
+**`Error parsing JSON: blank=true`**
+You used named arguments. The Core console needs them positional: `createwallet "bc3-web-wallet-recovery" false true`.
+
+**Everything said `success` but the funds are in the wrong wallet**
+You skipped step 3b. Core executes against whatever the **Wallet** dropdown says, and creating a wallet does not select it. Nothing is lost — see the FAQ below.
+
 **Core won't sync**
 BC3 has a public peer network that does not depend on us. If it stays at zero connections, check your firewall.
 
 ---
+
+## Questions people actually ask
+
+**Can I remove these descriptors from my wallet afterwards?**
+No — Core has no command to delete a descriptor, and it doesn't need one. If you import your own descriptors again with `"active": true`, the imported ones are deactivated automatically. An inactive descriptor generates nothing and costs nothing; it just sits in the list.
+
+**I imported into the wrong wallet. Did I lose anything?**
+No. `importdescriptors` only adds. Your original descriptors are still there with their private keys, and your coins are still visible and spendable. If they were imported with `"active": true` they were merely deactivated, meaning that wallet would derive *new* addresses from the other seed — reimport your own with `"active": true` and everything goes back. Following this guide as written (`"active": false`), not even that happens.
+
+**Do inactive descriptors still receive and spend?**
+Yes, both. Tested with real coins: a wallet whose descriptors had been deactivated saw an incoming payment within seconds and swept it out without complaint. `active` governs only which branch produces *new* addresses.
+
+**Why can't every descriptor be active at once?**
+Because "active" answers the question *"where does the next SegWit address come from?"*, and that question can only have one answer. Core keeps one slot per address type and per branch — eight in total — so a ninth takes someone's seat.
+
+**Does creating a wallet touch my existing one?**
+No. Every wallet is its own folder with its own `wallet.dat` under `wallets/`. They never share a file.
+
+**I want a wallet with only my own descriptors in it.**
+Create a fresh blank one and import only your own seed with `"timestamp": 0`. The same coins appear there — no transaction, no fee, nothing touches the chain. Then unload the old wallet.
 
 ## What this guide does **not** cover
 
