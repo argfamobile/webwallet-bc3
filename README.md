@@ -25,7 +25,7 @@ Total time: **about 15 minutes**, most of it downloading. The whole BC3 blockcha
 - **No passphrase needed.** The BC3 web wallet never used a BIP39 passphrase (sometimes called a "25th word"). If some tool asks you for one, leave it empty.
 - A computer with **~1 GB free disk**.
 
-> **Read this before you type your seed anywhere.** A recovery guide is exactly what a thief would fake. Anything that asks for your seed phrase should be a file you downloaded yourself, verified, and opened **with your internet disconnected**. If a website asks you to type your seed to "check your balance", it is stealing from you. There are no exceptions to this, including pages that look like ours.
+> **Read this before you type your seed anywhere.** A recovery guide is exactly what a thief would fake. Anything that asks for your seed phrase should be a file you downloaded yourself, **whose hash you checked** (see Step 2), and opened **with your internet disconnected**. If a website asks you to type your seed to "check your balance", it is stealing from you. There are no exceptions to this, including pages that look like ours.
 
 ---
 
@@ -44,6 +44,20 @@ On a normal connection this takes **1–2 minutes**. If it's taking much longer,
 ## Step 2 — Get your three commands
 
 Download **[`BC3-recovery.html`](BC3-recovery.html)** from this repository — one file, nothing to install.
+
+**Check it is the real one before you type anything into it.** This is the file where you write your seed phrase, so it is exactly what somebody would want to replace with a lookalike. It must hash to:
+
+```
+472ecc18aad24a493ec5d53fa59ebb45718ca0a31877a308e913b0582a70d59a
+```
+
+<table><tr><td>Windows</td><td><code>certutil -hashfile BC3-recovery.html SHA256</code></td></tr>
+<tr><td>macOS</td><td><code>shasum -a 256 BC3-recovery.html</code></td></tr>
+<tr><td>Linux</td><td><code>sha256sum BC3-recovery.html</code></td></tr></table>
+
+If it doesn't match, **do not use the file** — you did not get it from us.
+
+Then:
 
 1. **Disconnect from the internet.** The file has no network code at all, so it works the same either way, but disconnecting means you don't have to take our word for it.
 2. Open the file (double-click it).
