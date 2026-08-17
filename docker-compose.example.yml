@@ -1,0 +1,74 @@
+# ============================================================================
+# BC3 wallet stack — node + ElectrumX + cashier + wallet page.
+# Copy to docker-compose.yml, set the password, and `docker compose up -d`.
+#
+# This is the whole thing. If ArgfaMining disappears, somebody running this file
+# is serving BC3 wallets. That is the point of publishing it.
+# ============================================================================
+services:
+
+  # The node. Download BitcoinIII Core from github.com/argfamobile/BC3/releases
+  # and build a small image around it, or point DAEMON_URL below at a node you
+  # already run. The chain is ~300 MB and syncs in a couple of minutes.
+  bc3-node:
+    image: bitcoiniii-core:31.0.2       # build this yourself from the release
+    restart: unless-stopped
+    command:
+      - -datadir=/data
+      - -server=1
+      - -txindex=1                       # REQUIRED by ElectrumX
+      - -rpcuser=bc3
+      - -rpcpassword=${BC3_RPC_PASS:?set BC3_RPC_PASS in .env}
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=172.16.0.0/12
+    volumes:
+      - bc3-data:/data
+
+  electrumx:
+    build: ./electrumx-bc3
+    restart: unless-stopped
+    depends_on: [bc3-node]
+    environment:
+      DAEMON_URL: http://bc3:${BC3_RPC_PASS}@bc3-node:8332/
+      SERVICES: tcp://0.0.0.0:50001
+      HOST: ""
+    volumes:
+      - electrumx-db:/electrumx-db
+
+  cashier:
+    build:
+      context: ./cashier
+      dockerfile_inline: |
+        FROM node:20-alpine
+        WORKDIR /app
+        COPY package.json ./
+        RUN npm install --omit=dev
+        COPY . .
+        CMD ["node", "server.js"]
+    restart: unless-stopped
+    depends_on: [electrumx]
+    environment:
+      PORT: 3010
+      BC3_ELECTRUMX_HOST: electrumx
+      BC3_ELECTRUMX_PORT: 50001
+      # Node RPC fallback: keeps broadcasting possible if ElectrumX is down.
+      BC3_RPC_HOST: bc3-node
+      BC3_RPC_PORT: 8332
+      BC3_RPC_USER: bc3
+      BC3_RPC_PASS: ${BC3_RPC_PASS}
+
+  # Serves the wallet page and proxies /api/bc3/wallet to the cashier, so the
+  # page and its API share an origin and no CORS is involved.
+  wallet:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on: [cashier]
+    ports:
+      - "8080:80"
+    volumes:
+      - ./wallet:/usr/share/nginx/html:ro
+      - ./nginx.example.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  bc3-data:
+  electrumx-db:

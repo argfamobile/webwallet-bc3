@@ -1,0 +1,16 @@
+{
+  "name": "bc3-wallet-cashier",
+  "version": "1.0.0",
+  "description": "Stateless Electrum<->REST proxy for the BitcoinIII (BC3) browser wallet",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

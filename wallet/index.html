@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BC3 Wallet</title>
+<meta name="robots" content="noindex, nofollow">
+
+<!-- Point this at the BC3 cashier you want to use. A relative path works when the
+     cashier is served from this same origin. Users can also override it from
+     Settings, which is stored in this browser only. -->
+<meta name="bc3-cashier" content="/api/bc3/wallet">
+
+<style>
+    :root{
+      --brand:#2DFFAA; --accent-danger:#FF5A7A;
+      --text-primary:#E8EFEC; --text-secondary:#8FA39B; --text-muted:#5A6E66;
+      --panel-bg:rgba(255,255,255,.03); --panel-border:rgba(255,255,255,.08);
+      --panel-border-hi:rgba(255,255,255,.14); --panel-hi:rgba(255,255,255,.06);
+      --glass-blur:blur(11px); --radius:16px;
+      --font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      --font-heading:'Outfit',system-ui,sans-serif;
+      --font-mono:ui-monospace,'JetBrains Mono',Menlo,monospace;
+      --bg:#080B0A;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text-primary);font-family:var(--font-body);
+         min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px}
+    .wallet-shell{width:100%;max-width:520px}
+    .topnote{max-width:520px;margin:0 auto 18px;font-size:.82rem;color:var(--text-muted);line-height:1.5;text-align:center}
+    .topnote a{color:var(--brand)}
+
+    /* ── Theme BC3: ÚNICO override de acentos (igual que los dashboards). Verde --brand = chrome/CTA; naranja = moneda. ── */
+    :root { --accent-glow: #B5630A; --accent-secondary: #F7931A; --accent-tertiary: #FFB454; --accent: var(--accent-secondary); }
+    [hidden] { display: none !important; }
+
+    /* Wordmark serif BitcoinIII — "III" naranja (idéntico a los dashboards) */
+    .side__pool .coin-name { font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 1.36rem; letter-spacing: -0.2px; line-height: 1.05; }
+    .side__pool .coin-name i { font-style: italic; color: var(--accent-secondary); font-weight: 600; letter-spacing: 0.4px; }
+    .crumb .bc3wm { font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 1.06rem; color: var(--text-primary); letter-spacing: -0.1px; }
+    .crumb a:hover .bc3wm { color: #fff; }
+    .crumb .bc3wm i { font-style: italic; color: var(--accent-secondary); font-weight: 600; letter-spacing: 0.3px; }
+
+
+    /* ── Contenido de la wallet centrado en el área principal ── */
+    .wallet-shell { max-width: 560px; margin: 8px auto 0; }
+    /* Las 4 pestañas apiladas en la MISMA celda de grid → la celda (y por ende el cuadro) mide SIEMPRE
+       lo de la pestaña más alta, sea cual sea. Content-driven, sin número mágico en px (que era frágil
+       entre navegadores/zoom). Las inactivas siguen ocupando layout (para el sizing) pero invisibles. */
+    .panes { display: grid; }
+    .panes > .pane { grid-area: 1 / 1; min-width: 0; }
+    .panes > .pane[hidden] { display: block !important; visibility: hidden; pointer-events: none; }
+    #histList { max-height: 360px; overflow-y: auto; }   /* historial largo scrollea en vez de inflar el cuadro */
+    .card { background: var(--panel-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 24px; }
+    h1 { font-family: var(--font-heading); font-size: 1.4rem; font-weight: 700; margin: 0 0 7px; letter-spacing: -.4px; color: var(--text-primary); }
+    h2 { font-family: var(--font-heading); font-size: 1rem; font-weight: 600; margin: 0 0 13px; letter-spacing: -.2px; }
+    .lead { color: var(--text-secondary); font-size: .9rem; margin: 0 0 20px; line-height: 1.55; }
+    .lead b { color: var(--text-primary); font-weight: 600; }
+    .note { font-size: .76rem; color: var(--text-muted); margin-top: 11px; line-height: 1.55; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 16px; font-family: var(--font-body); font-weight: 700; font-size: .9rem; border-radius: 10px; cursor: pointer; border: 1px solid transparent; transition: .18s; }
+    .btn.primary { background: var(--brand); color: #04140D; }
+    .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px color-mix(in srgb, var(--brand) 40%, transparent); }
+    .btn.ghost { background: var(--panel-bg); border-color: var(--panel-border); color: var(--text-secondary); font-weight: 600; }
+    .btn.ghost:hover { background: var(--panel-hi); border-color: var(--panel-border-hi); color: var(--text-primary); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn + .btn { margin-top: 10px; }
+    .mono { font-family: var(--font-mono); }
+    .muted { color: var(--text-muted); font-size: .85rem; }
+
+    input, textarea { width: 100%; padding: 11px 12px; background: rgba(0,0,0,0.32); border: 1px solid var(--panel-border); border-radius: 9px; color: var(--text-primary); font-family: var(--font-mono); font-size: .88rem; transition: border-color .15s, box-shadow .15s; }
+    input:focus, textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent-secondary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-secondary) 16%, transparent); }
+    label.fld { display: block; font-size: .66rem; color: var(--text-muted); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+    /* Mostrar/ocultar passphrase + indicador de coincidencia en vivo */
+    .pass-wrap { position: relative; }
+    .pass-wrap input { padding-right: 44px; }
+    .pass-eye { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); width: 32px; height: 32px; display: grid; place-items: center; background: none; border: none; color: var(--text-muted); cursor: pointer; border-radius: 8px; padding: 0; }
+    .pass-eye:hover { color: var(--text-secondary); }
+    .pass-eye svg { width: 19px; height: 19px; }
+    .pass-match { margin-top: 9px; font-size: .8rem; line-height: 1.3; }
+    .pass-match.ok { color: var(--brand); }
+    .pass-match.err { color: var(--accent-danger, #ff6b6b); }
+    .row { display: flex; gap: 10px; }
+    .row > .btn { flex: 1 1 0; width: auto; min-width: 0; margin-top: 0; }   /* mitades iguales; margin-top:0 anula `.btn + .btn` (gap de botones APILADOS) que en fila horizontal empujaba el 2º botón y le robaba 10px de alto */
+    /* Dirección + botón Copy compacto (icono) al lado */
+    .addr-row { display: flex; gap: 8px; align-items: stretch; }
+    .addr-row .addr-box { flex: 1; min-width: 0; cursor: pointer; }
+    .iconbtn { flex: none; width: 46px; display: grid; place-items: center; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; color: var(--text-secondary); cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+    .iconbtn:hover { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 50%, transparent); background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); }
+    .iconbtn svg { width: 18px; height: 18px; }
+    .iconbtn.ok { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 55%, transparent); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+    /* Tarjeta "Descargar app Android" en el sidebar (estilo .nmf; se auto-oculta dentro de la app vía Capacitor) */
+    .dl__icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--accent-secondary) 14%, transparent); color: var(--accent-secondary); }
+    .dl__icon svg { width: 23px; height: 23px; }
+    #dlAndroid .nmf__body { flex: 1; min-width: 0; }
+    #dlAndroid .dl__arrow { width: 18px; height: 18px; flex: none; color: var(--accent-secondary); margin-left: auto; }
+    /* Modal de descarga (QR para escanear desde desktop + botón directo) */
+    .dlmodal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.62); backdrop-filter: blur(3px); }
+    .dlmodal[hidden] { display: none; }
+    .dlmodal__card { position: relative; width: 100%; max-width: 360px; max-height: calc(100vh - 36px); overflow-y: auto; background: #0a0e13; border: 1px solid var(--panel-border); border-radius: 20px; padding: 28px 24px 24px; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+    .dlmodal__close { position: absolute; top: 13px; right: 13px; width: 32px; height: 32px; display: grid; place-items: center; background: none; border: none; color: var(--text-muted); cursor: pointer; border-radius: 8px; }
+    .dlmodal__close:hover { background: var(--panel-hi); color: var(--text-primary); }
+    .dlmodal__close svg { width: 18px; height: 18px; }
+    .dlmodal__coin { width: 60px; height: 60px; border-radius: 15px; margin: 0 auto 12px; display: block; }
+    .dlmodal__title { font-family: 'Newsreader', Georgia, serif; font-weight: 600; font-size: 1.4rem; line-height: 1.1; }
+    .dlmodal__title i { font-style: italic; color: var(--accent-secondary); }
+    .dlmodal__lead { font-family: var(--font-mono); font-size: .73rem; color: var(--text-muted); margin: 5px 0 18px; }
+    .dlmodal__qr { width: 184px; height: 184px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 10px; box-sizing: border-box; }
+    .dlmodal__qr svg { width: 100%; height: 100%; display: block; }
+    .dlmodal__qrlabel { font-size: .8rem; color: var(--text-secondary); margin-top: 11px; }
+    .dlmodal__or { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--text-muted); font-size: .74rem; }
+    .dlmodal__or::before, .dlmodal__or::after { content: ''; flex: 1; height: 1px; background: var(--panel-border); }
+    .dlmodal__btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; padding: 13px 18px; background: var(--brand); color: #04140D; font-weight: 600; font-size: .95rem; border-radius: 12px; text-decoration: none; transition: transform .15s, box-shadow .15s; }
+    .dlmodal__btn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px color-mix(in srgb, var(--brand) 38%, transparent); }
+    .dlmodal__btn svg { width: 18px; height: 18px; }
+    .dlmodal__steps { text-align: left; display: grid; gap: 11px; margin: 18px 0 14px; }
+    .dlmodal__step { display: flex; gap: 11px; align-items: flex-start; font-size: .85rem; color: var(--text-secondary); line-height: 1.45; }
+    .dlmodal__step b { color: var(--text-primary); font-weight: 600; }
+    .dlmodal__n { width: 24px; height: 24px; flex: none; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-mono); font-weight: 600; font-size: .76rem; color: var(--accent-secondary); background: color-mix(in srgb, var(--accent-secondary) 13%, transparent); border: 1px solid color-mix(in srgb, var(--accent-secondary) 30%, transparent); }
+    .dlmodal__note { font-size: .78rem; color: var(--text-muted); line-height: 1.5; text-align: left; padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 11px; background: var(--panel-bg); margin: 0; }
+    .dlmodal__note b { color: var(--brand); }
+    /* Selector de tipo de address en Recibir (segmented control, mismo patrón visual que .feetab) */
+    .rxtypes { display: flex; gap: 4px; background: rgba(0,0,0,0.32); border: 1px solid var(--panel-border); border-radius: 11px; padding: 4px; margin-bottom: 16px; }
+    .rxtab { flex: 1; padding: 8px 0; text-align: center; font-family: var(--font-mono); font-weight: 600; font-size: .74rem; letter-spacing: .03em; color: var(--text-secondary); border-radius: 8px; cursor: pointer; border: none; background: none; transition: color .15s, background .15s; }
+    .rxtab:hover { color: var(--text-primary); background: var(--panel-hi); }
+    .rxtab.active { color: var(--accent-secondary); background: color-mix(in srgb, var(--accent-secondary) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 30%, transparent); }
+    .warn { border: 1px solid color-mix(in srgb, var(--accent-danger) 40%, transparent); background: color-mix(in srgb, var(--accent-danger) 9%, transparent); border-radius: 11px; padding: 12px 14px; font-size: .82rem; color: #ffc4cf; margin-bottom: 16px; line-height: 1.5; }
+
+    .seed-grid { list-style: none; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .seed-grid li { font-family: var(--font-mono); font-size: .85rem; background: var(--panel-hi); border: 1px solid var(--panel-border); border-radius: 9px; padding: 9px 11px; color: var(--text-primary); }
+    .seed-n { color: var(--text-muted); margin-right: 7px; font-size: .72rem; }
+    .ack { display: flex; align-items: flex-start; gap: 9px; font-size: .82rem; color: var(--text-secondary); margin: 4px 0 16px; }
+    .ack input { width: auto; margin-top: 2px; }
+
+    .bal { position: relative; overflow: hidden; text-align: center; padding: 20px 0 22px; margin-bottom: 18px; border-radius: 13px;
+      border: 1px solid color-mix(in srgb, var(--accent-secondary) 30%, transparent);
+      background: linear-gradient(160deg, color-mix(in srgb, var(--accent-secondary) 10%, transparent), transparent 70%), var(--panel-bg); }
+    .bal::after { content: ''; position: absolute; top: -28px; right: -28px; width: 110px; height: 110px; background: radial-gradient(circle, color-mix(in srgb, var(--accent-secondary) 16%, transparent), transparent 70%); pointer-events: none; }
+    .bal .lbl { font-family: var(--font-body); font-size: .66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+    .bal .amt { font-family: var(--font-heading); font-size: 2rem; font-weight: 700; letter-spacing: -1px; margin: 6px 0 2px; color: var(--accent-secondary); }
+    .bal .amt .unit { font-family: var(--font-body); font-size: .9rem; color: var(--text-secondary); font-weight: 500; margin-left: 4px; letter-spacing: 0; }
+    .bal .unconf { font-family: var(--font-mono); font-size: .74rem; color: var(--accent-tertiary); }
+
+    .tabs { display: flex; gap: 4px; background: rgba(0,0,0,0.32); border: 1px solid var(--panel-border); border-radius: 11px; padding: 4px; margin-bottom: 18px; }
+    .tab { flex: 1; padding: 9px 0; text-align: center; font-family: var(--font-mono); font-weight: 600; font-size: .78rem; letter-spacing: .04em; color: var(--text-secondary); border-radius: 8px; cursor: pointer; border: none; background: none; transition: color .15s, background .15s; }
+    .tab:hover { color: var(--text-primary); background: var(--panel-hi); }
+    .tab.active { color: var(--accent-secondary); background: color-mix(in srgb, var(--accent-secondary) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 30%, transparent); }
+
+    .qr { display: grid; place-items: center; padding: 12px; background: #fff; border-radius: 12px; width: 200px; height: 200px; margin: 0 auto 14px; }
+    .qr svg { width: 100%; height: 100%; }
+    .addr-box { font-family: var(--font-mono); font-size: .82rem; word-break: break-all; background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; text-align: center; line-height: 1.5; color: var(--accent-secondary); }
+    .rx-path { text-align: center; font-family: var(--font-mono); font-size: .68rem; color: var(--text-muted); margin: 8px 0 14px; }
+
+    .hist-row { display: flex; justify-content: space-between; gap: 10px; padding: 12px 2px; border-bottom: 1px solid var(--panel-border); text-decoration: none; color: var(--text-primary); }
+    .hist-row:hover .hist-tx { color: var(--accent-secondary); }
+    .hist-tx { font-family: var(--font-mono); font-size: .8rem; }
+    .hist-h { font-family: var(--font-mono); font-size: .72rem; color: var(--text-muted); white-space: nowrap; }
+
+    .seed-reveal { font-family: var(--font-mono); font-size: .85rem; line-height: 1.6; background: rgba(0,0,0,0.4); border: 1px solid color-mix(in srgb, var(--accent-secondary) 35%, transparent); border-radius: 10px; padding: 14px; margin-top: 12px; word-spacing: 4px; color: var(--text-primary); }
+    .gate { text-align: center; padding: 22px 8px; }
+    .gate .ic { font-size: 1.6rem; }
+    .gate h2 { margin: 10px 0 8px; }
+
+    .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; background: var(--panel-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid var(--panel-border-hi); color: var(--text-primary); font-size: .85rem; padding: 11px 18px; border-radius: 11px; transition: .25s; z-index: 60; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.err { border-color: color-mix(in srgb, var(--accent-danger) 55%, transparent); }
+    .toast.ok { border-color: color-mix(in srgb, var(--brand) 55%, transparent); }
+
+    /* ── Enviar ── */
+    .send-amt { display: flex; gap: 8px; align-items: stretch; }
+    .send-amt input { flex: 1; }
+    .maxbtn { flex: none; padding: 0 14px; border-radius: 9px; background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--text-secondary); font-family: var(--font-mono); font-size: .76rem; font-weight: 600; cursor: pointer; }
+    .maxbtn:hover { color: var(--text-primary); border-color: var(--panel-border-hi); }
+    .maxbtn.on { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 50%, transparent); background: color-mix(in srgb, var(--accent-secondary) 14%, transparent); }
+    .feetabs { display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.32); border: 1px solid var(--panel-border); border-radius: 11px; padding: 4px; }
+    .feetab { padding: 8px 14px; text-align: center; font-family: var(--font-mono); font-weight: 600; font-size: .74rem; color: var(--text-secondary); border-radius: 8px; cursor: pointer; border: none; background: none; transition: color .15s, background .15s; }
+    .feetab:hover { color: var(--text-primary); background: var(--panel-hi); }
+    .feetab.active { color: var(--accent-secondary); background: color-mix(in srgb, var(--accent-secondary) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 30%, transparent); }
+    #feeInfo { font-family: var(--font-mono); font-size: .72rem; }
+
+    @media (max-width: 480px) { .seed-grid { grid-template-columns: 1fr 1fr; } }
+
+    /* ───────── MÓVIL (≤860px): sidebar → drawer off-canvas, wallet a pantalla completa ───────── */
+    .topbar__menu { display: none; background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 6px; margin-right: 4px; border-radius: 9px; }
+    .topbar__menu:hover { background: var(--panel-hi); color: var(--text-primary); }
+    .topbar__menu svg { width: 22px; height: 22px; display: block; }
+    .side-backdrop { display: none; }
+    @media (max-width: 860px) {
+      .app { grid-template-columns: 1fr; }
+      .side {
+        position: fixed; top: 0; left: 0; bottom: 0; width: 284px; max-width: 84vw; height: 100%;
+        overflow-y: auto; z-index: 60; flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 0;
+        transform: translateX(-100%); transition: transform .26s ease; will-change: transform;
+        background: #080b11; border-right: 1px solid var(--panel-border); border-bottom: none; padding: 16px 14px;
+      }
+      .side.open { transform: translateX(0); box-shadow: 0 0 48px rgba(0,0,0,.65); }
+      .side__pool, .side__label { display: block !important; }
+      .side__nav { flex-direction: column !important; flex-wrap: nowrap !important; }
+      .side__brand { padding: 2px 0 14px; margin-bottom: 14px; border-bottom: 1px solid var(--panel-border); }
+      .side-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 55; opacity: 0; pointer-events: none; transition: opacity .26s; }
+      .side-backdrop.open { opacity: 1; pointer-events: auto; }
+      .topbar__menu { display: inline-flex; align-items: center; }
+      .topbar { padding: 11px 14px; }
+      .topbar .algo { display: none; }
+      .content { padding: 14px 12px 44px; }
+      .wallet-shell { max-width: 100%; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<p class="topnote">
+  Non-custodial BitcoinIII wallet. Your seed and keys stay in this browser.<br>
+  <a href="https://github.com/argfamobile/webwallet-bc3" target="_blank" rel="noopener">Source, and how to recover without any server</a>
+</p>
+
+<div class="wallet-shell">
+<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+  <button id="lockBtn" class="btn ghost screen-only" data-screen-only="wallet" hidden style="width:auto;padding:7px 16px;font-size:.82rem">Lock</button>
+</div>
+<!-- ── ONBOARD ── -->
+          <section class="screen" data-screen="onboard">
+            <div class="card">
+              <h1>Your BC3 wallet</h1>
+              <p class="lead">A non-custodial HD wallet for BitcoinIII. Your seed and keys live <b>only in this browser</b> — signing happens client-side. We never see your keys.</p>
+              <button id="createBtn" class="btn primary">Create a new wallet</button>
+              <button id="importBtn" class="btn ghost">Import with seed phrase</button>
+              <p class="note">Standard BIP39 + BIP44/49/84/86 (Legacy, P2SH, SegWit, Taproot). Your 12-word seed recovers your funds on any compatible wallet.</p>
+            </div>
+          </section>
+
+          <!-- ── CREATE ── -->
+          <section class="screen" data-screen="create" hidden>
+            <div class="card">
+              <h1>Back up your seed phrase</h1>
+              <div class="warn">Write these 12 words down in order and keep them offline. Anyone with this phrase controls your funds. We cannot recover it for you.</div>
+              <ol id="seedGrid" class="seed-grid"></ol>
+              <label class="ack"><input type="checkbox" id="seedAck"> I have written down my seed phrase in a safe place.</label>
+              <button id="confirmSeed" class="btn primary" disabled>Continue</button>
+              <button class="btn ghost" data-back>Cancel</button>
+            </div>
+          </section>
+
+          <!-- ── IMPORT ── -->
+          <section class="screen" data-screen="import" hidden>
+            <div class="card">
+              <h1>Import wallet</h1>
+              <p class="lead">Enter your 12 or 24-word BIP39 seed phrase.</p>
+              <textarea id="importInput" rows="3" placeholder="word1 word2 word3 …" autocomplete="off" spellcheck="false"></textarea>
+              <button id="doImportBtn" class="btn primary" style="margin-top:14px">Import</button>
+              <button class="btn ghost" data-back>Back</button>
+            </div>
+          </section>
+
+          <!-- ── UNLOCK ── -->
+          <section class="screen" data-screen="unlock" hidden>
+            <div class="card">
+              <h1>Unlock wallet</h1>
+              <p class="lead">This device has an encrypted wallet. Enter your passphrase to unlock.</p>
+              <div class="pass-wrap">
+                <input type="password" id="unlockPass" placeholder="Passphrase" autocomplete="current-password">
+                <button type="button" class="pass-eye" data-target="unlockPass" aria-label="Show/hide passphrase">
+                  <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+                </button>
+              </div>
+              <button id="unlockBtn" class="btn primary" style="margin-top:14px">Unlock</button>
+              <button id="unlockToImport" class="btn ghost" style="margin-top:10px">Import a different seed phrase</button>
+              <p class="note">Forgot your passphrase? Import your seed phrase to restore — it overrides the saved one.</p>
+            </div>
+          </section>
+
+          <!-- ── WALLET ── -->
+          <section class="screen" data-screen="wallet" hidden>
+            <div class="card">
+              <div class="bal">
+                <div class="lbl">Balance</div>
+                <div class="amt"><span id="balAmount">…</span><span class="unit">BC3</span></div>
+                <div class="unconf" id="balUnconf" hidden></div>
+              </div>
+              <div class="tabs">
+                <button class="tab active" data-tab="receive">Receive</button>
+                <button class="tab" data-tab="send">Send</button>
+                <button class="tab" data-tab="history">History</button>
+                <button class="tab" data-tab="settings">Settings</button>
+              </div>
+
+              <div class="panes">
+              <div class="pane" data-pane="receive">
+                <div class="rxtypes" role="tablist" aria-label="Address type">
+                  <button type="button" class="rxtab active" data-rxtype="p2wpkh" title="Native SegWit — bc1q… (recomendado)">SegWit</button>
+                  <button type="button" class="rxtab" data-rxtype="p2tr" title="Taproot — bc1p…">Taproot</button>
+                  <button type="button" class="rxtab" data-rxtype="p2pkh" title="Legacy — 1…">Legacy</button>
+                  <button type="button" class="rxtab" data-rxtype="p2sh" title="Nested SegWit P2SH — 3…">P2SH</button>
+                </div>
+                <div id="rxQr" class="qr"></div>
+                <div class="addr-row">
+                  <div id="rxAddr" class="addr-box mono" title="Click to copy"></div>
+                  <button id="copyAddr" class="iconbtn" title="Copy address" aria-label="Copy address">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                  </button>
+                </div>
+                <div id="rxPath" class="rx-path"></div>
+                <div class="row">
+                  <button id="newAddr" class="btn ghost">New address</button>
+                  <button id="refreshBal" class="btn ghost">Refresh balance</button>
+                </div>
+              </div>
+
+              <div class="pane" data-pane="send" hidden>
+                <label class="fld">Send to</label>
+                <input id="sendTo" placeholder="BC3 address (1…)" autocomplete="off" spellcheck="false">
+                <label class="fld">Amount</label>
+                <div class="send-amt">
+                  <input id="sendAmt" type="number" min="0" step="any" inputmode="decimal" placeholder="0.00000000">
+                  <button id="sendMax" type="button" class="maxbtn" data-on="0">Max</button>
+                </div>
+                <label class="fld">Network fee</label>
+                <div class="feetabs">
+                  <button type="button" class="feetab" data-fee="slow">Slow</button>
+                  <button type="button" class="feetab active" data-fee="normal">Normal</button>
+                  <button type="button" class="feetab" data-fee="fast">Fast</button>
+                  <span id="feeInfo" class="muted" style="margin-left:auto"></span>
+                </div>
+                <button id="sendBtn" class="btn primary" style="margin-top:16px">Send</button>
+                <div id="sendStatus" class="muted" style="margin-top:10px; word-break:break-all"></div>
+              </div>
+
+              <div class="pane" data-pane="history" hidden>
+                <div id="histList"></div>
+              </div>
+
+              <div class="pane" data-pane="settings" hidden>
+                <h2>Backup &amp; security</h2>
+                <button id="showSeedBtn" class="btn ghost">Reveal seed phrase</button>
+                <div id="seedReveal" class="seed-reveal" hidden></div>
+                <label class="fld">Encrypt &amp; save on this device</label>
+                <div class="pass-wrap">
+                  <input type="password" id="encPass" placeholder="Passphrase (min 8 chars)" autocomplete="new-password">
+                  <button type="button" class="pass-eye" data-target="encPass" aria-label="Show/hide passphrase">
+                    <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+                  </button>
+                </div>
+                <div class="pass-wrap" style="margin-top:8px">
+                  <input type="password" id="encPass2" placeholder="Repeat passphrase" autocomplete="new-password">
+                  <button type="button" class="pass-eye" data-target="encPass2" aria-label="Show/hide passphrase">
+                    <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+                  </button>
+                </div>
+                <div id="passMatch" class="pass-match" hidden></div>
+                <button id="saveDeviceBtn" class="btn ghost" style="margin-top:10px" disabled>Encrypt &amp; save</button>
+                <button id="removeBtn" class="btn ghost" style="margin-top:10px" hidden>Remove wallet from this device</button>
+                <p class="note">Saving stores your seed encrypted with AES-GCM (PBKDF2, 210k iters) in this browser. The passphrase never leaves your device.</p>
+
+                <h2 style="margin-top:22px">Server</h2>
+                <label class="fld">Wallet server (cashier)</label>
+                <input type="text" id="cashierUrl" placeholder="/api/bc3/wallet" autocomplete="off" spellcheck="false">
+                <div class="row" style="margin-top:10px">
+                  <button id="saveCashier" class="btn ghost">Use this server</button>
+                  <button id="resetCashier" class="btn ghost">Reset to default</button>
+                </div>
+                <p class="note">This wallet reads balances through a server, but your keys never leave this browser either way &mdash; it only ever sends public addresses and already-signed transactions. If ArgfaMining ever goes away, point this at any other BC3 server and the wallet keeps working. <a href="https://github.com/argfamobile/webwallet-bc3" target="_blank" rel="noopener">How to run one, and how to recover without any server at all</a>.</p>
+              </div>
+              </div>
+            </div>
+          </section>
+</div>
+
+<div id="toast" class="toast"></div>
+<script type="module" src="assets/wallet-bc3.js"></script>
+</body>
+</html>
