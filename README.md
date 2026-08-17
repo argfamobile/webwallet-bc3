@@ -11,9 +11,9 @@ You do not need to trust us to follow it. Every step is a command you can read, 
 Your wallet is a standard **BIP39 seed phrase** with standard derivation paths. That is not a marketing claim — it means any tool that implements those standards produces the exact same keys, forever. To get your coins back you need two things:
 
 1. **BitcoinIII Core**, the network's own wallet software.
-2. **Your master key**, derived from your words on a machine with no internet.
+2. **`BC3-recovery.html`** from this repository — one file that turns your words into the exact commands Core needs.
 
-Then you paste in a handful of one-line commands and Core does the rest.
+Then you paste three commands and Core does the rest.
 
 Total time: **about 15 minutes**, most of it downloading. The whole BC3 blockchain is only **291 MB** and syncs from scratch in **under two minutes** — this is not Bitcoin, you are not waiting a day.
 
@@ -41,117 +41,55 @@ On a normal connection this takes **1–2 minutes**. If it's taking much longer,
 
 ---
 
-## Step 2 — Get your master key, offline
+## Step 2 — Get your three commands
 
-Core does not understand seed phrases. It understands *keys*. So first you convert one into the other, and you do it with the network turned off.
+Download **[`BC3-recovery.html`](BC3-recovery.html)** from this repository — one file, nothing to install.
 
-1. Go to **https://github.com/iancoleman/bip39/releases** and download the file named `bip39-standalone.html` from the latest release. This is a widely used, open-source tool that runs entirely inside your browser — it is not ours, and that is on purpose: it has been reviewed by far more people than anything we could write.
-2. **Disconnect from the internet.** Turn off Wi-Fi, unplug the cable. Do it now, before the next step.
-3. Open the downloaded `bip39-standalone.html` file in your browser.
-4. Type your seed phrase into the **BIP39 Mnemonic** field.
-5. Leave **Coin** set to `BTC - Bitcoin`. This is correct — BC3 uses the same key format as Bitcoin.
-6. Find the field labelled **BIP32 Root Key**. It starts with `xprv`. Copy it.
+1. **Disconnect from the internet.** The file has no network code at all, so it works the same either way, but disconnecting means you don't have to take our word for it.
+2. Open the file (double-click it).
+3. Type your seed phrase and press the button.
 
-That `xprv` is your master key. Keep it exactly as private as your seed phrase: anyone who has it owns your coins.
+It shows you **your four addresses first**. Check that you recognise at least one — if none of them look familiar, the seed phrase is wrong and you should stop there rather than carry on.
 
-> **It must start with `xprv`.** If you copied something starting with `zprv` or `yprv`, you took it from the wrong box — those are a different encoding and BitcoinIII Core will reject them. The **BIP32 Root Key** field at the top is the one you want.
+Below that are three commands, each with a copy button. That's everything you need.
 
-Once you have finished with the tool, close the browser tab. You can reconnect after Step 3.
+<details>
+<summary>Prefer not to trust our file? Do it by hand instead</summary>
 
----
+You can build the same commands with [iancoleman/bip39](https://github.com/iancoleman/bip39/releases) (`bip39-standalone.html`), a widely reviewed tool that isn't ours. Offline, paste your seed, and copy the **BIP32 Root Key** — it starts with `xprv`. Not `zprv` or `yprv`; those are a different encoding and Core rejects them.
 
-## Step 3 — Import into BitcoinIII Core
-
-Open Core and go to **Window → Console** (in `bitcoinIII-qt`). You'll type commands there.
-
-### 3a. Create an empty wallet
+Then build the eight descriptors, substituting your key for `XPRV`:
 
 ```
-createwallet "bc3-web-wallet-recovery" false true
+pkh(XPRV/44h/0h/0h/0/*)        pkh(XPRV/44h/0h/0h/1/*)
+sh(wpkh(XPRV/49h/0h/0h/0/*))   sh(wpkh(XPRV/49h/0h/0h/1/*))
+wpkh(XPRV/84h/0h/0h/0/*)       wpkh(XPRV/84h/0h/0h/1/*)
+tr(XPRV/86h/0h/0h/0/*)         tr(XPRV/86h/0h/0h/1/*)
 ```
 
-Those arguments are positional on purpose. The Core console reads every argument as JSON, so `blank=true` fails there with `Error parsing JSON` — named arguments only work with `bitcoinIII-cli -named`, which is a different path.
+Each one needs a checksum. Run `getdescriptorinfo "<the descriptor>"` in Core and take **only the `checksum` field**, appending it as `#checksum`.
 
-### 3b. Switch to that wallet, and check that you did
+> **Do not copy the `descriptor` field from that reply.** Core answers with your descriptor rewritten so the private key becomes a public one. Import that and you get a wallet that watches your coins but can never spend them — and the error won't say so.
 
-**Core does not switch for you.** At the top of the console window there is a **Wallet** dropdown still pointing at whatever was open before. Change it to `bc3-web-wallet-recovery`, then confirm:
+Then import each one as in Step 3, with `"timestamp":0`, `"active":false`, `"range":[0,100]`, and `"internal":true` for the ones ending in `/1/*`.
 
-```
-getwalletinfo
-```
+</details>
 
-The answer must say `"walletname": "bc3-web-wallet-recovery"`. If it says anything else, you are about to import into the wrong wallet.
+## Step 3 — Paste them into Core
 
-### 3c. Build your eight descriptors
+Open **Window → Console** in Core.
 
-A *descriptor* tells Core how your addresses were made. Your wallet could receive on four different address styles, so there are four of them — and each needs a receiving and a change version, which is eight lines.
+**Command 1** creates an empty wallet to recover into.
 
-Take the eight templates below and **replace every `XPRV` with your master key from Step 2**:
+**Then switch wallets.** Core does *not* do this for you: the **Wallet** dropdown at the top of that window still points at whatever was open before. Change it to `bc3-web-wallet-recovery`.
 
-```
-pkh(XPRV/44h/0h/0h/0/*)
-pkh(XPRV/44h/0h/0h/1/*)
-sh(wpkh(XPRV/49h/0h/0h/0/*))
-sh(wpkh(XPRV/49h/0h/0h/1/*))
-wpkh(XPRV/84h/0h/0h/0/*)
-wpkh(XPRV/84h/0h/0h/1/*)
-tr(XPRV/86h/0h/0h/0/*)
-tr(XPRV/86h/0h/0h/1/*)
-```
+**Command 2** is how you confirm you switched. The answer must say `"walletname": "bc3-web-wallet-recovery"`. If it says anything else, stop and switch — otherwise the next command lands in the wrong wallet.
 
-**Import all eight even if you only ever used one address.** They cover the four styles the wallet supported — legacy `1…`, `3…`, `bc1q…` and `bc1p…`. If you skip one, any coins you received on it stay invisible, and the balance you see will be wrong in the worst possible way: quietly.
+**Command 3** does the import. It's long; use the copy button rather than retyping it. You should get eight replies, all `"success": true`.
 
-### 3d. Get a checksum for each one
+Core then scans the chain, which takes seconds.
 
-Core refuses descriptors without a checksum. For each of the eight lines, run:
-
-```
-getdescriptorinfo "pkh(XPRV/44h/0h/0h/0/*)"
-```
-
-From the reply, copy **only the `checksum` value** (eight characters). Your descriptor becomes the line you typed, plus `#`, plus that checksum:
-
-```
-pkh(XPRV/44h/0h/0h/0/*)#abcd1234
-```
-
-> **Do not copy the `descriptor` field from that reply.** This is the single most common way to get stuck. Core answers with a *rewritten* version of your descriptor in which your private key has been replaced by a public one. Import that and you get a wallet that can watch your coins but can never spend them, and the error message won't explain why. Take the `checksum` and nothing else.
-
-### 3e. Import
-
-Import them **one at a time** — eight short commands instead of one enormous one. If a line has a typo you'll see exactly which, instead of hunting through a wall of text.
-
-> **Why `"active": false`.** In Core, "active" doesn't mean "enabled" — it means *"new addresses of this type come from this descriptor"*, and there is room for exactly one per address type. Importing with `"active": true` therefore **evicts** whatever was there, so running these commands in the wrong wallet silently changes which branch that wallet derives from. With `false` nothing is displaced, and you lose nothing that matters here: the wallet still sees the imported funds and still spends them, because watching and signing don't consult that flag. The only thing it won't do is hand you *new* addresses from this seed, which is not what you came for.
-
-Note the quoting: **single quotes on the outside, double quotes inside, no backslashes.** That is what the Core console expects.
-
-The four *receiving* descriptors use `"internal":false`:
-
-```
-importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/0/*))#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
-importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/0/*)#CHECKSUM","timestamp":0,"active":false,"internal":false,"range":[0,100]}]'
-```
-
-The four *change* ones are identical except the path ends in `/1/*` and `internal` is `true`:
-
-```
-importdescriptors '[{"desc":"pkh(XPRV/44h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"sh(wpkh(XPRV/49h/0h/0h/1/*))#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"wpkh(XPRV/84h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
-importdescriptors '[{"desc":"tr(XPRV/86h/0h/0h/1/*)#CHECKSUM","timestamp":0,"active":false,"internal":true,"range":[0,100]}]'
-```
-
-Each `CHECKSUM` is the one you got in Step 3d **for that exact line** — they are all different, and a checksum from the wrong line will be rejected.
-
-`"timestamp":0` tells Core to search the whole chain, because you don't know when you received. On BC3 that scan takes seconds.
-
-Every command should answer `"success": true`.
-
-> **Using a terminal instead of the Core window?** With `bitcoinIII-cli` the quoting rules are your shell's, not Core's. On Linux and macOS the commands above work as written. On Windows `cmd.exe`, single quotes don't apply — use double quotes outside and `\"` for the inner ones. If you are unsure, use the Core window: it is the same commands and one less thing to get wrong.
-
----
+> **Why the import says `"active": false`.** In Core, "active" doesn't mean "enabled" — it means *"new addresses of this type come from this descriptor"*, and there's room for exactly one per address type. So importing as active would **evict** whatever was there, and running this in the wrong wallet would silently change which branch that wallet derives from. As `false` it displaces nothing, and you lose nothing that matters: the wallet still sees the imported coins and still spends them, because watching and signing don't consult that flag.
 
 ## Step 4 — Check, then spend
 
@@ -162,13 +100,7 @@ getwalletinfo
 listunspent
 ```
 
-Before trusting it, confirm Core reproduces an address you recognise:
-
-```
-getnewaddress
-```
-
-Compare it against the addresses your web wallet used to show. They come from the same keys, so they match.
+Compare what you see against the addresses the recovery file showed you in Step 2. Same keys, same addresses.
 
 To move everything out — the real proof that you are in control:
 
@@ -186,7 +118,7 @@ That's it. Your coins are yours again, and no part of it went through us.
 
 The worst moment to discover your backup doesn't work is when it's the only thing you have left. This takes two minutes and moves nothing:
 
-Do **Step 2** offline, then compare the addresses the tool shows under its `BIP84`, `BIP86`, `BIP44` and `BIP49` tabs against the ones your wallet displays under **Receive**. If they match, your seed phrase is correct and this whole guide will work for you when it matters.
+Open `BC3-recovery.html`, type your seed phrase, and compare the four addresses it shows against the ones your wallet displays under **Receive**. If they match, your seed phrase is correct and this whole guide will work when it matters.
 
 If they *don't* match, you wrote your words down wrong — and you have just found out while you still have a working wallet to fix it from. That is worth two minutes.
 
@@ -194,17 +126,17 @@ If they *don't* match, you wrote your words down wrong — and you have just fou
 
 ## If something goes wrong
 
+**`Error parsing JSON: blank=true`**
+You typed the command by hand with named arguments. The Core console needs them positional — use the copy button.
+
+**Everything said `success` but the coins aren't there**
+You skipped the wallet switch. Core runs against whatever the **Wallet** dropdown says. Switch and run command 3 again; nothing was harmed.
+
 **`Cannot import descriptor without private keys to a wallet with private keys enabled`**
-You imported the rewritten descriptor from Step 3d instead of your own. Go back and use only the `checksum`, appended to the line you typed.
-
-**`Missing checksum`**
-You skipped Step 3d on that descriptor.
-
-**Core rejects your key**
-It probably starts with `zprv` or `yprv`. Use the **BIP32 Root Key** field, which starts with `xprv`.
+Only happens on the manual route: you copied the `descriptor` field from `getdescriptorinfo` instead of just its `checksum`.
 
 **Balance is zero but you expected coins**
-Either the rescan is still running (`getwalletinfo` shows `scanning`), or you imported fewer than eight descriptors, or the coins are on addresses beyond index 100 — raise `range` to `[0,1000]` and import again.
+Either the rescan is still running (`getwalletinfo` shows `scanning`), or the coins are on addresses past index 100 — raise `range` to `[0,1000]` and import again.
 
 **`Error parsing JSON: blank=true`**
 You used named arguments. The Core console needs them positional: `createwallet "bc3-web-wallet-recovery" false true`.
